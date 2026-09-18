@@ -31,15 +31,13 @@ Windows 图形工具：把 PNG、JPG、JPEG 图片转换成带圆角的多尺寸
 ├─ _engine/
 │  └─ png-jpg-to-ico.ps1        图片转换引擎
 ├─ 转换PNG-JPG到ICO.cmd          拖放式命令行入口
-├─ release/
-│  └─ 图片转圆角ICO.exe          可独立运行的发布版
 ├─ README.md                     中文说明
 └─ README.en.md                  English documentation
 ```
 
 ## 独立运行版
 
-可直接下载并运行：[图片转圆角ICO.exe](release/图片转圆角ICO.exe)
+可在 GitHub Releases 下载并运行：[下载最新 EXE](https://github.com/Elysia04/Unify-Icon-Rounded-Corners/releases/latest)
 
 EXE 已经把 PowerShell 转换引擎嵌入程序，运行时不需要旁边的 `_app`、
 `_engine` 或 Python、ImageMagick。把 EXE 复制到任意可写目录即可使用。
@@ -79,7 +77,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\_app\build.ps1
 ```
 
 EXE 会把转换引擎嵌入程序集，因此生成后可以单独使用。构建出的 EXE
-可手动复制到 `release/` 作为发布附件。
+可作为 GitHub Release 的附件上传。
 
 如需重新生成应用图标：
 
@@ -124,7 +122,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 ## 发布到 GitHub
 
-源码位于 `_app/` 和 `_engine/`，可独立运行的 EXE 位于
-`release/图片转圆角ICO.exe`。转换结果和运行日志仍由 `.gitignore` 排除。
+源码位于 `_app/` 和 `_engine/`，可独立运行的 EXE 发布在 GitHub Releases
+的 Assets 中。转换结果和运行日志仍由 `.gitignore` 排除。
 
 本仓库暂未附带开源许可证；公开发布前请根据你的授权意愿选择并添加许可证。

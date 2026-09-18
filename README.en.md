@@ -11,7 +11,7 @@ Version **2.0.0** includes:
 - A PowerShell image conversion engine;
 - Application icon, manifest, and local build scripts;
 - A drag-and-drop CMD entry point;
-- A standalone EXE published under `release/`.
+- A standalone EXE published as a GitHub Release asset.
 
 ## Features
 
@@ -27,7 +27,7 @@ Version **2.0.0** includes:
 
 ## Standalone EXE
 
-Download and run: [图片转圆角ICO.exe](release/图片转圆角ICO.exe)
+Download and run: [latest EXE release](https://github.com/Elysia04/Unify-Icon-Rounded-Corners/releases/latest)
 
 The EXE embeds the PowerShell conversion engine. It does not need the adjacent
 `_app` or `_engine` folders, Python, ImageMagick, or an Internet connection.
@@ -55,8 +55,6 @@ Linux, or Windows Server Core without desktop components.
 ├─ _app/                         C# UI source, icon, and build scripts
 ├─ _engine/
 │  └─ png-jpg-to-ico.ps1        Image conversion engine
-├─ release/
-│  └─ 图片转圆角ICO.exe          Standalone release build
 ├─ 转换PNG-JPG到ICO.cmd          Drag-and-drop command entry point
 ├─ README.md                     Chinese documentation
 └─ README.en.md                  English documentation
@@ -82,8 +80,8 @@ The generated file is:
 .\图片转圆角ICO.exe
 ```
 
-The build script embeds the conversion engine in the EXE. Copy the result to
-`release/` when preparing a new standalone release.
+The build script embeds the conversion engine in the EXE. Upload the result as
+an asset of a GitHub Release when preparing a new standalone release.
 
 To regenerate the application icon:
 
