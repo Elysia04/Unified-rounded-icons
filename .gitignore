@@ -1,0 +1,17 @@
+# Build output
+/图片转圆角ICO.exe
+*.pdb
+*.ilk
+
+# Runtime output
+/修改图标存放/
+/_engine/last-run.log
+
+# IDE and operating-system files
+/.vs/
+**/bin/
+**/obj/
+*.user
+*.suo
+Thumbs.db
+Desktop.ini
