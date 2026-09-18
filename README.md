@@ -1,5 +1,7 @@
 # 图片转圆角 ICO
 
+[English](README.en.md) | 中文
+
 Windows 图形工具：把 PNG、JPG、JPEG 图片转换成带圆角的多尺寸 ICO 图标。
 
 当前版本为 **2.0.0**，完整源码包括：
@@ -29,8 +31,32 @@ Windows 图形工具：把 PNG、JPG、JPEG 图片转换成带圆角的多尺寸
 ├─ _engine/
 │  └─ png-jpg-to-ico.ps1        图片转换引擎
 ├─ 转换PNG-JPG到ICO.cmd          拖放式命令行入口
-└─ README.md
+├─ release/
+│  └─ 图片转圆角ICO.exe          可独立运行的发布版
+├─ README.md                     中文说明
+└─ README.en.md                  English documentation
 ```
+
+## 独立运行版
+
+可直接下载并运行：[图片转圆角ICO.exe](release/图片转圆角ICO.exe)
+
+EXE 已经把 PowerShell 转换引擎嵌入程序，运行时不需要旁边的 `_app`、
+`_engine` 或 Python、ImageMagick。把 EXE 复制到任意可写目录即可使用。
+
+默认输出目录是 EXE 旁边的 `修改图标存放`。如果 EXE 放在
+`C:\Program Files` 等无写权限目录，请在界面中选择一个有写权限的输出目录。
+
+## 运行环境
+
+- Windows 10 或 Windows 11；
+- .NET Framework 4.x（Windows 10/11 通常已预装）；
+- Windows PowerShell 5.1；
+- 可写的临时目录和输出目录；
+- 不需要 Python、ImageMagick 或网络连接。
+
+本程序是 Windows Forms 桌面程序，不能直接运行在 macOS、Linux 或 Windows
+Server Core 等没有桌面组件的环境。
 
 ## 构建 EXE
 
@@ -52,7 +78,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\_app\build.ps1
 .\图片转圆角ICO.exe
 ```
 
-EXE 会把转换引擎嵌入程序集，因此生成后可以单独使用。
+EXE 会把转换引擎嵌入程序集，因此生成后可以单独使用。构建出的 EXE
+可手动复制到 `release/` 作为发布附件。
 
 如需重新生成应用图标：
 
@@ -97,7 +124,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 ## 发布到 GitHub
 
-仓库只保留源码和构建素材。编译生成的 EXE、转换结果和运行日志已由
-`.gitignore` 排除，建议把 EXE 作为 GitHub Release 附件发布。
+源码位于 `_app/` 和 `_engine/`，可独立运行的 EXE 位于
+`release/图片转圆角ICO.exe`。转换结果和运行日志仍由 `.gitignore` 排除。
 
 本仓库暂未附带开源许可证；公开发布前请根据你的授权意愿选择并添加许可证。
