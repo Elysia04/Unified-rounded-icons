@@ -2,8 +2,14 @@
 
 [中文](README.md) | English
 
-A Windows desktop utility that converts PNG, JPG, and JPEG images into
-multi-size ICO files with rounded corners.
+This is a Windows tool that converts PNG, JPG, and JPEG images into rounded,
+multi-size ICO files.
+
+For best results, first extract the original app icon on an Android phone with
+an icon extraction tool such as **Apk Extractor**, then process it with this
+converter. It samples colors near the image edges to fill the rounded-corner
+background and applies consistent rounded transparent edges, helping icons
+from different apps look cleaner and more uniform on Windows.
 
 Version **2.0.0** includes:
 

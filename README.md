@@ -2,7 +2,11 @@
 
 [English](README.en.md) | 中文
 
-Windows 图形工具：把 PNG、JPG、JPEG 图片转换成带圆角的多尺寸 ICO 图标。
+这是一个把 PNG、JPG、JPEG 图片转换成带圆角、多尺寸 ICO 文件的 Windows 工具。
+
+推荐先在 Android 手机上使用应用图标提取工具（例如 **Apk Extractor**）
+导出原始应用图标，再用本工具制作 ICO。本工具会提取图片边缘颜色来填充圆角区域，
+并生成统一的圆角和透明边缘，让不同来源的图标在 Windows 桌面上更加整齐、美观。
 
 当前版本为 **2.0.0**，完整源码包括：
 
