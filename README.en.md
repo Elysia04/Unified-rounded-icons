@@ -23,13 +23,18 @@ Version **2.0.0** includes:
 
 - Drag-and-drop and batch image selection;
 - Center crop to a square;
-- Optional trimming of transparent or solid-color borders;
+- Optional border trimming with aspect-ratio-preserving placement and at least 10% internal spacing to keep artwork clear of the rounded corners;
 - Adjustable corner radius (0%–50%) and transparent padding (0%–20%);
 - 8× supersampling for smooth transparent edges;
 - Automatic EXIF orientation handling;
 - Seven 32-bit PNG layers: 16, 24, 32, 48, 64, 128, and 256 pixels;
 - Dark-rim correction for transparent black borders;
 - Remembered output directory and UI settings.
+
+Border trimming requires a uniform solid-color or transparent perimeter; ambiguous
+backgrounds keep their original bounds. Verified border colors take priority for
+background filling, and visible artwork colors are never repainted by edge cleanup.
+Isolated transparent artwork uses a white card, or black for near-white artwork.
 
 ## Standalone EXE
 
@@ -88,6 +93,12 @@ The generated file is:
 
 The build script embeds the conversion engine in the EXE. Upload the result as
 an asset of a GitHub Release when preparing a new standalone release.
+
+Run the image layout regression checks (`-EdgeSource` optionally accepts a real image):
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\image-layout.ps1
+```
 
 To regenerate the application icon:
 

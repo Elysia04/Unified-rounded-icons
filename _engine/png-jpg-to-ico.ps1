@@ -250,6 +250,39 @@ function Mix-Colors {
     )
 }
 
+function Get-UniformBorderBackground {
+    param([System.Drawing.Bitmap] $Source)
+
+    # A corner alone can belong to the artwork. Require agreement around all
+    # four edges before treating any color (or transparency) as empty space.
+    $reference = $Source.GetPixel(0, 0)
+    $transparent = $reference.A -lt 16
+    $stepX = [math]::Max(1, [int][math]::Floor($Source.Width / 256))
+    $stepY = [math]::Max(1, [int][math]::Floor($Source.Height / 256))
+    $samples = [System.Collections.Generic.List[System.Drawing.Color]]::new()
+    for ($x = 0; $x -lt $Source.Width; $x += $stepX) {
+        $samples.Add($Source.GetPixel($x, 0))
+        $samples.Add($Source.GetPixel($x, $Source.Height - 1))
+    }
+    for ($y = 0; $y -lt $Source.Height; $y += $stepY) {
+        $samples.Add($Source.GetPixel(0, $y))
+        $samples.Add($Source.GetPixel($Source.Width - 1, $y))
+    }
+    $samples.Add($Source.GetPixel($Source.Width - 1, $Source.Height - 1))
+    foreach ($sample in $samples) {
+        if ($transparent) {
+            if ($sample.A -ge 16) { return $null }
+        }
+        elseif ($sample.A -lt 200 -or
+            [math]::Abs([int]$sample.R - $reference.R) -gt 10 -or
+            [math]::Abs([int]$sample.G - $reference.G) -gt 10 -or
+            [math]::Abs([int]$sample.B - $reference.B) -gt 10) {
+            return $null
+        }
+    }
+    return [pscustomobject]@{ Transparent = $transparent; Color = $reference }
+}
+
 function Get-UniformContentBounds {
     param(
         [System.Drawing.Bitmap] $Source
@@ -266,6 +299,8 @@ function Get-UniformContentBounds {
     $probeWidth = [math]::Max(1, [int][math]::Round($Source.Width * $scale))
     $probeHeight = [math]::Max(1, [int][math]::Round($Source.Height * $scale))
     $whole = [System.Drawing.Rectangle]::new(0, 0, $Source.Width, $Source.Height)
+    $background = Get-UniformBorderBackground $Source
+    if ($null -eq $background) { return $whole }
 
     $probe = [System.Drawing.Bitmap]::new(
         $probeWidth,
@@ -287,37 +322,10 @@ function Get-UniformContentBounds {
             [System.Drawing.GraphicsUnit]::Pixel
         )
 
-        $corners = @(
-            $probe.GetPixel(0, 0),
-            $probe.GetPixel($probeWidth - 1, 0),
-            $probe.GetPixel(0, $probeHeight - 1),
-            $probe.GetPixel($probeWidth - 1, $probeHeight - 1)
-        )
-
-        # 四角全透明 = 透明背景，只看 alpha；否则拿四角颜色当背景色。
-        $transparent = $true
-        foreach ($corner in $corners) {
-            if ($corner.A -ge 16) { $transparent = $false }
-        }
-
-        $refR = @()
-        $refG = @()
-        $refB = @()
-        if (-not $transparent) {
-            foreach ($corner in $corners) {
-                if ($corner.A -ge 200) {
-                    $refR += [int]$corner.R
-                    $refG += [int]$corner.G
-                    $refB += [int]$corner.B
-                }
-            }
-            if ($refR.Count -eq 0) {
-                return $whole
-            }
-        }
+        $transparent = $background.Transparent
+        $reference = $background.Color
 
         $tolerance = 10
-        $refCount = $refR.Count
         $minX = $probeWidth
         $minY = $probeHeight
         $maxX = -1
@@ -331,14 +339,12 @@ function Get-UniformContentBounds {
                     $isBackground = $pixel.A -lt 16
                 }
                 else {
-                    for ($c = 0; $c -lt $refCount; $c++) {
-                        if ([math]::Abs($pixel.R - $refR[$c]) -le $tolerance -and
-                            [math]::Abs($pixel.G - $refG[$c]) -le $tolerance -and
-                            [math]::Abs($pixel.B - $refB[$c]) -le $tolerance) {
-                            $isBackground = $true
-                            break
-                        }
-                    }
+                    $isBackground = $pixel.A -lt 16 -or (
+                        $pixel.A -ge 200 -and
+                        [math]::Abs([int]$pixel.R - $reference.R) -le $tolerance -and
+                        [math]::Abs([int]$pixel.G - $reference.G) -le $tolerance -and
+                        [math]::Abs([int]$pixel.B - $reference.B) -le $tolerance
+                    )
                 }
 
                 if (-not $isBackground) {
@@ -384,13 +390,15 @@ function Get-UniformContentBounds {
 }
 function New-RoundedPngBytes {
     param(
+        [ValidateNotNull()]
         [System.Drawing.Bitmap] $Source,
+        [ValidateRange(16, 256)]
         [int] $Size,
+        [ValidateRange(0, 50)]
         [int] $RadiusPercent,
+        [ValidateRange(0, 20)]
         [int] $PaddingPercent,
-        [int] $ContentCenterX = -1,
-        [int] $ContentCenterY = -1,
-        [int] $ContentSide = 0
+        [System.Drawing.Rectangle] $ContentBounds = [System.Drawing.Rectangle]::Empty
     )
 
     # Supersampling leaves clean alpha edges even at 16x16 and 24x24.
@@ -401,31 +409,41 @@ function New-RoundedPngBytes {
     $radius = [int][math]::Round($contentSize * $RadiusPercent / 100.0)
     $radius = [math]::Min($radius, [int][math]::Floor($contentSize / 2))
 
-    # 取背景色用的采样区域永远取原图中心的正方形，和裁切区域分开：
-    # 先裁掉白边再取色的话，主色会变成图案本身的颜色，整个图标就糊成一块。
+    # Keep fallback color sampling separate from the trimmed artwork bounds.
     $sampleSide = [math]::Min($Source.Width, $Source.Height)
     $sampleX = [int][math]::Floor(($Source.Width - $sampleSide) / 2)
     $sampleY = [int][math]::Floor(($Source.Height - $sampleSide) / 2)
 
-    if ($ContentSide -gt 0) {
-        # 先按内容边界决定裁切范围，再以内容中心切正方形，
-        # 这样同一批图标的图案大小才一致。
-        $side = [math]::Min([math]::Min($Source.Width, $Source.Height), $ContentSide)
-        $cropX = [int][math]::Max(0, [math]::Min($Source.Width - $side, $ContentCenterX - [int][math]::Floor($side / 2)))
-        $cropY = [int][math]::Max(0, [math]::Min($Source.Height - $side, $ContentCenterY - [int][math]::Floor($side / 2)))
-        $cropSide = $side
+    if (-not $ContentBounds.IsEmpty) {
+        if ($ContentBounds.Width -le 0 -or $ContentBounds.Height -le 0 -or
+            $ContentBounds.X -lt 0 -or $ContentBounds.Y -lt 0 -or
+            ([long]$ContentBounds.X + $ContentBounds.Width) -gt $Source.Width -or
+            ([long]$ContentBounds.Y + $ContentBounds.Height) -gt $Source.Height) {
+            throw 'Content bounds must be positive and lie inside the source image.'
+        }
+        # Fit the complete artwork with one scale factor. Leave room for the
+        # rounded mask; filling the card with trimmed artwork clips its edges.
+        $insetRatio = [math]::Max(0.10, ($RadiusPercent / 100.0) * (1 - 1 / [math]::Sqrt(2)) + 1.0 / ($contentSize / $supersample))
+        $artworkSize = $contentSize * (1 - 2 * $insetRatio)
+        $scale = $artworkSize / [math]::Max($ContentBounds.Width, $ContentBounds.Height)
+        $drawWidth = $ContentBounds.Width * $scale
+        $drawHeight = $ContentBounds.Height * $scale
+        $sourceRect = $ContentBounds
+        $destination = [System.Drawing.RectangleF]::new(
+            [single]($padding + ($contentSize - $drawWidth) / 2),
+            [single]($padding + ($contentSize - $drawHeight) / 2),
+            [single]$drawWidth,
+            [single]$drawHeight
+        )
     }
     else {
-        $cropSide = $sampleSide
-        $cropX = $sampleX
-        $cropY = $sampleY
+        $sourceRect = [System.Drawing.Rectangle]::new($sampleX, $sampleY, $sampleSide, $sampleSide)
+        $destination = [System.Drawing.RectangleF]::new($padding, $padding, $contentSize, $contentSize)
     }
 
-    # Background colour = the most frequent solid colour of the icon. An icon's
-    # border is usually a duller shade of that colour, and any corner patch can
-    # end up averaging (or even mostly containing) that dull shade - which then
-    # paints the very rim we are trying to remove. The dominant colour cannot be
-    # fooled that way.
+    # Prefer the verified border color so a solid logo cannot become its own
+    # background. Transparent tiles use their dominant visible color as backing.
+    $borderBackground = Get-UniformBorderBackground $Source
     $votes = @{}
     $sampleStep = [math]::Max(1, [int][math]::Floor($sampleSide / 64))
     for ($sy = 0; $sy -lt $sampleSide; $sy += $sampleStep) {
@@ -451,7 +469,18 @@ function New-RoundedPngBytes {
             $topColor = [System.Drawing.Color]::FromArgb(255, [int]$parts[0], [int]$parts[1], [int]$parts[2])
         }
     }
-    if ($null -eq $topColor) {
+    if ($null -ne $borderBackground -and -not $borderBackground.Transparent) {
+        $topColor = [System.Drawing.Color]::FromArgb(255, $borderBackground.Color.R, $borderBackground.Color.G, $borderBackground.Color.B)
+    }
+    elseif ($null -ne $borderBackground -and $borderBackground.Transparent) {
+        # An isolated transparent logo has no card color. Use a neutral backing
+        # with contrast rather than filling its empty space with the logo color.
+        $topColor = if ($null -ne $topColor -and $topColor.R -gt 230 -and $topColor.G -gt 230 -and $topColor.B -gt 230) {
+            [System.Drawing.Color]::Black
+        }
+        else { [System.Drawing.Color]::White }
+    }
+    elseif ($null -eq $topColor) {
         $topColor = Mix-Colors `
             (Get-NearbyCornerColor $Source $sampleX $sampleY $sampleSide TopLeft) `
             (Get-NearbyCornerColor $Source $sampleX $sampleY $sampleSide TopRight)
@@ -475,10 +504,13 @@ function New-RoundedPngBytes {
     $maskFinalGraphics = $null
     $output = $null
     $stream = $null
+    $imageAttributes = $null
 
     try {
-        # First create opaque color data. Transparent pixels in the source are
-        # backed by colors sampled from the nearest visible corner pixels.
+        # Bicubic sampling must not read transparent black beyond the bitmap.
+        $imageAttributes = [System.Drawing.Imaging.ImageAttributes]::new()
+        $imageAttributes.SetWrapMode([System.Drawing.Drawing2D.WrapMode]::TileFlipXY)
+        # Back source transparency with the chosen card color before masking.
         $workGraphics = [System.Drawing.Graphics]::FromImage($work)
         $workGraphics.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceOver
         $workGraphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
@@ -493,19 +525,10 @@ function New-RoundedPngBytes {
         )
         $workGraphics.FillRectangle($gradient, 0, 0, $workSize, $workSize)
 
-        $destination = [System.Drawing.Rectangle]::new(
-            $padding,
-            $padding,
-            $contentSize,
-            $contentSize
-        )
         $workGraphics.DrawImage(
             $Source,
             $destination,
-            $cropX,
-            $cropY,
-            $cropSide,
-            $cropSide,
+            [System.Drawing.RectangleF]::new($sourceRect.X, $sourceRect.Y, $sourceRect.Width, $sourceRect.Height),
             [System.Drawing.GraphicsUnit]::Pixel
         )
 
@@ -544,7 +567,8 @@ function New-RoundedPngBytes {
             0,
             $workSize,
             $workSize,
-            [System.Drawing.GraphicsUnit]::Pixel
+            [System.Drawing.GraphicsUnit]::Pixel,
+            $imageAttributes
         )
 
         $maskFinal = [System.Drawing.Bitmap]::new(
@@ -564,7 +588,8 @@ function New-RoundedPngBytes {
             0,
             $workSize,
             $workSize,
-            [System.Drawing.GraphicsUnit]::Pixel
+            [System.Drawing.GraphicsUnit]::Pixel,
+            $imageAttributes
         )
 
         $output = [System.Drawing.Bitmap]::new(
@@ -572,75 +597,19 @@ function New-RoundedPngBytes {
             $Size,
             [System.Drawing.Imaging.PixelFormat]::Format32bppArgb
         )
-        # Card colour: the most common colour inside the four corner patches, 8% to 22%
-        # of the way in. A logo sits in the middle and along the edges and never reaches
-        # a corner, so those patches are pure card body. Voting with exact colours here
-        # is what gave the version the user confirmed as good.
-        $cornerInner = [math]::Max(3, [int][math]::Round($Size * 0.08))
-        $cornerOuter = [math]::Max($cornerInner + 2, [int][math]::Round($Size * 0.22))
-        $bandColor = $topColor
-        $bandVotes = @{}
-        for ($bandY = 0; $bandY -lt $Size; $bandY++) {
-            $bandEdgeY = [math]::Min($bandY, $Size - 1 - $bandY)
-            if ($bandEdgeY -lt $cornerInner -or $bandEdgeY -gt $cornerOuter) { continue }
-            for ($bandX = 0; $bandX -lt $Size; $bandX++) {
-                $bandEdgeX = [math]::Min($bandX, $Size - 1 - $bandX)
-                if ($bandEdgeX -lt $cornerInner -or $bandEdgeX -gt $cornerOuter) { continue }
-                if ($maskFinal.GetPixel($bandX, $bandY).R -lt 128) { continue }
-                $bandPixel = $final.GetPixel($bandX, $bandY)
-                $bandKey = "$($bandPixel.R),$($bandPixel.G),$($bandPixel.B)"
-                if ($bandVotes.ContainsKey($bandKey)) {
-                    $bandVotes[$bandKey] = $bandVotes[$bandKey] + 1
-                }
-                else {
-                    $bandVotes[$bandKey] = 1
-                }
-            }
-        }
-        $bandBest = 0
-        foreach ($bandEntry in $bandVotes.GetEnumerator()) {
-            if ($bandEntry.Value -gt $bandBest) {
-                $bandBest = $bandEntry.Value
-                $bandParts = $bandEntry.Key -split ','
-                $bandColor = [System.Drawing.Color]::FromArgb(255, [int]$bandParts[0], [int]$bandParts[1], [int]$bandParts[2])
-            }
-        }
-        $centre = ($Size - 1) / 2.0
         for ($y = 0; $y -lt $Size; $y++) {
-            $t = if ($Size -gt 1) { $y / [double]($Size - 1) } else { 0.0 }
-            $bgR = [int][math]::Round($topColor.R + ($bottomColor.R - $topColor.R) * $t)
-            $bgG = [int][math]::Round($topColor.G + ($bottomColor.G - $topColor.G) * $t)
-            $bgB = [int][math]::Round($topColor.B + ($bottomColor.B - $topColor.B) * $t)
-            $edgeY = [math]::Min($y, $Size - 1 - $y)
             for ($x = 0; $x -lt $Size; $x++) {
                 $color = $final.GetPixel($x, $y)
                 $alpha = $maskFinal.GetPixel($x, $y).R
                 $red = $color.R
                 $green = $color.G
                 $blue = $color.B
-                # Only the outermost sliver is repainted. A wide band (this used to be
-                # 20% of the frame) simply eats the outer edge of any artwork that
-                # reaches the border - a full-bleed ring or disc lost its rim and shrank
-                # to the middle 60% of the card. 6% is enough to clean a dull or dark
-                # rim while leaving the artwork intact.
-                $outerBand = [math]::Max(2, [int][math]::Round($Size * 0.06))
-                $cornerSpan = [int][math]::Round($Size * 0.06)
-                $inBand = $edgeY -lt $outerBand -or $x -lt $outerBand -or ($Size - 1 - $x) -lt $outerBand
-                if ($alpha -lt 255 -or $inBand) {
-                    # The transparent/anti-aliased edge of the rounded shape, any dark or
-                    # dull border, and everything in the corners carries the card colour.
-                    # Corners are always repainted: a logo never sits there, so a pale
-                    # block left behind by an earlier version cannot survive. Along the
-                    # edges a near-white pixel is taken to be the logo and kept.
-                    $bandSum = $bandColor.R + $bandColor.G + $bandColor.B
-                    $selfSum = $red + $green + $blue
-                    $inCorner = (($x -lt $cornerSpan) -or ($x -ge $Size - $cornerSpan)) -and (($y -lt $cornerSpan) -or ($y -ge $Size - $cornerSpan))
-                    $isLogo = (-not $inCorner) -and ($selfSum -gt ($bandSum + 12)) -and ($selfSum -gt 720)
-                    if (-not $isLogo) {
-                        $red = $bandColor.R
-                        $green = $bandColor.G
-                        $blue = $bandColor.B
-                    }
+                # Source transparency was composited over the background above.
+                # Keep visible RGB intact, including colored artwork at the edge.
+                if ($alpha -eq 0) {
+                    $red = $topColor.R
+                    $green = $topColor.G
+                    $blue = $topColor.B
                 }
                 $output.SetPixel(
                     $x,
@@ -655,6 +624,7 @@ function New-RoundedPngBytes {
         return ,([byte[]]$stream.ToArray())
     }
     finally {
+        if ($null -ne $imageAttributes) { $imageAttributes.Dispose() }
         if ($null -ne $stream) { $stream.Dispose() }
         if ($null -ne $output) { $output.Dispose() }
         if ($null -ne $maskFinalGraphics) { $maskFinalGraphics.Dispose() }
@@ -816,16 +786,16 @@ foreach ($file in $files) {
 
         [Console]::Out.WriteLine("正在处理：($index/$($files.Count)) $($file.Name)")
 
-        $centerX = -1
-        $centerY = -1
-        $contentSide = 0
+        $contentBounds = [System.Drawing.Rectangle]::Empty
         if ($TrimBorder) {
             $bounds = Get-UniformContentBounds -Source $source
             if ($bounds.Width -lt $source.Width -or $bounds.Height -lt $source.Height) {
-                $contentSide = [math]::Min($source.Width, [math]::Min($source.Height, [math]::Max($bounds.Width, $bounds.Height)))
-                $centerX = $bounds.X + [int][math]::Floor($bounds.Width / 2)
-                $centerY = $bounds.Y + [int][math]::Floor($bounds.Height / 2)
+                $contentBounds = $bounds
                 [Console]::Out.WriteLine("  已裁掉空白边：$($bounds.Width) x $($bounds.Height)（原图 $($source.Width) x $($source.Height)）")
+            }
+            elseif ($source.Width -ne $source.Height) {
+                # Ambiguous borders still need containment for rectangular inputs.
+                $contentBounds = $bounds
             }
         }
 
@@ -838,9 +808,7 @@ foreach ($file in $files) {
                         -Size $size `
                         -RadiusPercent $RadiusPercent `
                         -PaddingPercent $PaddingPercent `
-                        -ContentCenterX $centerX `
-                        -ContentCenterY $centerY `
-                        -ContentSide $contentSide
+                        -ContentBounds $contentBounds
                 }
             }
         )

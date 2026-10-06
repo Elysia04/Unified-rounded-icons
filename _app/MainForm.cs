@@ -318,7 +318,7 @@ namespace RoundedIcoApp
             paddingSuffix.Anchor = AnchorStyles.Left;
             paddingSuffix.Margin = new Padding(8, 0, 0, 0);
 
-            trimCheck.Text = "自动裁掉四周空白边，让每个图标的图案大小一致";
+            trimCheck.Text = "自动裁边，图案等比例居中并保留留白";
             trimCheck.Font = Theme.Body;
             trimCheck.ForeColor = Theme.Text;
             trimCheck.BackColor = Theme.Card;
@@ -328,8 +328,8 @@ namespace RoundedIcoApp
             trimCheck.TextAlign = ContentAlignment.MiddleLeft;
             trimCheck.FlatStyle = FlatStyle.System;
             tips.SetToolTip(trimCheck,
-                "打开后会先去掉图片四周多余的透明或纯色边，再按图案内容居中切正方形。\n"
-                + "同一批图标放在一起时，图案大小看起来就一致了；纯色照片不受影响。");
+                "去掉多余的透明或纯色边后，按原始比例缩放完整图案。\n"
+                + "保留安全留白，避免圆角裁掉图案；透明边距控制的是整个图标的外部留白。");
 
             layout.Controls.Add(radiusLabel, 0, 0);
             layout.Controls.Add(radiusBox, 1, 0);
